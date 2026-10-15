@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini-Tor: Onion Routing Protocol Live Implementation</title>
+  <meta name="description" content="Production C++ implementation of the Onion Routing Protocol (Mini-Tor) with real-time ECDH key exchange, 3-layer AES-256-GCM onion encryption, and live telemetry.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <div class="logo-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <circle cx="12" cy="12" r="6"></circle>
+          <circle cx="12" cy="12" r="2"></circle>
+        </svg>
+      </div>
+      <div>
+        <h1 class="nav-title">MINI-TOR</h1>
+        <span class="nav-subtitle">C++ ONION ROUTING CORE &amp; LIVE CONTROLLER</span>
+      </div>
+    </div>
+    
+    <div class="nav-status-group">
+      <div class="status-badge" id="backend-status-badge">
+        <span class="pulse-dot green"></span>
+        <span id="backend-status-text">Backend: Connected</span>
+      </div>
+      <div class="status-badge" id="circuit-status-badge">
+        <span class="pulse-dot yellow" id="circuit-dot"></span>
+        <span id="circuit-status-text">Circuit: Not Established</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="btn-refresh-consensus" title="Refresh Directory Consensus">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Sync Network
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Application Container -->
+  <main class="app-layout">
+    <!-- Left Column: Topology & Network Actions -->
+    <section class="panel-left">
+      <!-- Section: Circuit Builder & Live Topology -->
+      <div class="card card-glow">
+        <div class="card-header">
+          <div class="card-title-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            <h2>Live Circuit Topology (3 Hops)</h2>
+          </div>
+          <button class="btn btn-primary" id="btn-build-circuit">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span id="btn-build-circuit-text">Establish 3-Hop Circuit</span>
+          </button>
+        </div>
+
+        <!-- Visual Circuit Graph -->
+        <div class="circuit-graph-container" id="circuit-graph">
+          <div class="node-wrapper" id="node-client">
+            <div class="node-box client-box active">
+              <div class="node-icon">💻</div>
+              <div class="node-meta">
+                <span class="node-name">Client Proxy</span>
+                <span class="node-ip">127.0.0.1:8080</span>
+                <span class="node-tag">Origin</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hop-connector" id="conn-1">
+            <div class="connector-line"></div>
+            <div class="packet-dot" id="dot-hop1"></div>
+            <span class="connector-label">Hop 1 (K1)</span>
+          </div>
+
+          <div class="node-wrapper" id="node-guard">
+            <div class="node-box guard-box">
+              <div class="node-icon">🛡️</div>
+              <div class="node-meta">
+                <span class="node-name" id="label-guard-name">Guard Relay</span>
+                <span class="node-ip" id="label-guard-addr">127.0.0.1:9001</span>
+                <span class="node-tag guard">Guard</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hop-connector" id="conn-2">
+            <div class="connector-line"></div>
+            <div class="packet-dot" id="dot-hop2"></div>
+            <span class="connector-label">Hop 2 (K2)</span>
+          </div>
+
+          <div class="node-wrapper" id="node-middle">
+            <div class="node-box middle-box">
+              <div class="node-icon">⚡</div>
+              <div class="node-meta">
+                <span class="node-name" id="label-middle-name">Middle Relay</span>
+                <span class="node-ip" id="label-middle-addr">127.0.0.1:9002</span>
+                <span class="node-tag middle">Middle</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hop-connector" id="conn-3">
+            <div class="connector-line"></div>
+            <div class="packet-dot" id="dot-hop3"></div>
+            <span class="connector-label">Hop 3 (K3)</span>
+          </div>
+
+          <div class="node-wrapper" id="node-exit">
+            <div class="node-box exit-box">
+              <div class="node-icon">🚪</div>
+              <div class="node-meta">
+                <span class="node-name" id="label-exit-name">Exit Relay</span>
+                <span class="node-ip" id="label-exit-addr">127.0.0.1:9003</span>
+                <span class="node-tag exit">Exit</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hop-connector" id="conn-dest">
+            <div class="connector-line dest-line"></div>
+            <div class="packet-dot" id="dot-dest"></div>
+            <span class="connector-label plain">Plaintext</span>
+          </div>
+
+          <div class="node-wrapper" id="node-dest">
+            <div class="node-box dest-box active">
+              <div class="node-icon">🎯</div>
+              <div class="node-meta">
+                <span class="node-name">Target Server</span>
+                <span class="node-ip" id="label-dest-addr">127.0.0.1:9090</span>
+                <span class="node-tag dest">Destination</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Negotiated Cryptographic Session Keys Table -->
+        <div class="keys-table-container">
+          <div class="keys-table-header">
+            <h3>Negotiated Diffie-Hellman Keys (X25519 + HKDF-SHA256)</h3>
+            <span class="badge-status" id="keys-status">Awaiting Handshake</span>
+          </div>
+          <div class="keys-grid">
+            <div class="key-card" id="key-card-k1">
+              <div class="key-card-header">
+                <span class="key-badge guard">K1: Guard Session</span>
+                <span class="key-cipher">AES-256-GCM</span>
+              </div>
+              <div class="key-value mono" id="val-k1">Not Negotiated</div>
+              <div class="key-meta">Known only to: <strong>Client</strong> &amp; <strong>Guard</strong></div>
+            </div>
+
+            <div class="key-card" id="key-card-k2">
+              <div class="key-card-header">
+                <span class="key-badge middle">K2: Middle Session</span>
+                <span class="key-cipher">AES-256-GCM</span>
+              </div>
+              <div class="key-value mono" id="val-k2">Not Negotiated</div>
+              <div class="key-meta">Known only to: <strong>Client</strong> &amp; <strong>Middle</strong></div>
+            </div>
+
+            <div class="key-card" id="key-card-k3">
+              <div class="key-card-header">
+                <span class="key-badge exit">K3: Exit Session</span>
+                <span class="key-cipher">AES-256-GCM</span>
+              </div>
+              <div class="key-value mono" id="val-k3">Not Negotiated</div>
+              <div class="key-meta">Known only to: <strong>Client</strong> &amp; <strong>Exit</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Onion Message Dispatcher & Layer Peeler -->
+      <div class="card card-glow">
+        <div class="card-header">
+          <div class="card-title-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <h2>Onion Payload Dispatcher &amp; Real-Time Peeler</h2>
+          </div>
+        </div>
+
+        <div class="dispatch-form">
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label for="input-message">Message / Payload to Send Through Circuit:</label>
+              <input type="text" id="input-message" class="input-text" placeholder="Enter confidential message or HTTP request..." value="Tor Confidential Packet: College Project Evaluation #2026">
+            </div>
+            <div class="form-group flex-1">
+              <label for="input-dest">Target Destination:</label>
+              <input type="text" id="input-dest" class="input-text mono" value="127.0.0.1:9090">
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <div class="quick-presets">
+              <span class="quick-label">Presets:</span>
+              <button class="btn btn-pill" data-preset="Secret College Token #7719">Secret Token</button>
+              <button class="btn btn-pill" data-preset="GET / HTTP/1.1\r\nHost: target.local\r\n\r\n">HTTP GET</button>
+              <button class="btn btn-pill" data-preset="ANONYMOUS PING: Can you see my IP?">Anonymity Test</button>
+            </div>
+            <button class="btn btn-primary btn-glow" id="btn-send-message">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              <span>Transmit Across C++ Onion Circuit</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Real-Time 3-Layer Onion Peeler Visualization -->
+        <div class="onion-peeler-section">
+          <h3>Cryptographic Onion Layers (Encrypted by Client $\to$ Peeled by Relays)</h3>
+          
+          <div class="onion-layers-grid">
+            <!-- Layer 1 -->
+            <div class="layer-card layer-outer" id="card-layer-1">
+              <div class="layer-header">
+                <span class="layer-title">Layer 1: Outer Shell (Guard)</span>
+                <span class="layer-badge guard" id="badge-l1">Encrypted with K1</span>
+              </div>
+              <div class="layer-body">
+                <div class="layer-meta-line">
+                  <span>Peeled At:</span> <strong>Hop 1 (Guard Node)</strong>
+                </div>
+                <div class="layer-meta-line">
+                  <span>Size:</span> <span id="size-l1">--</span>
+                </div>
+                <div class="layer-meta-line">
+                  <span>Visible to Guard:</span> <code class="mono-badge">Next Hop: Middle (127.0.0.1:9002)</code>
+                </div>
+                <div class="layer-cipher-box">
+                  <div class="cipher-label">Ciphertext Preview (AES-256-GCM Wire Bytes):</div>
+                  <pre class="cipher-hex mono" id="hex-l1">Awaiting transmission...</pre>
+                </div>
+              </div>
+            </div>
+
+            <!-- Layer 2 -->
+            <div class="layer-card layer-middle" id="card-layer-2">
+              <div class="layer-header">
+                <span class="layer-title">Layer 2: Intermediate Shell (Middle)</span>
+                <span class="layer-badge middle" id="badge-l2">Encrypted with K2</span>
+              </div>
+              <div class="layer-body">
+                <div class="layer-meta-line">
+                  <span>Peeled At:</span> <strong>Hop 2 (Middle Node)</strong>
+                </div>
+                <div class="layer-meta-line">
+                  <span>Size:</span> <span id="size-l2">--</span>
+                </div>
+                <div class="layer-meta-line">
+                  <span>Visible to Middle:</span> <code class="mono-badge">Next Hop: Exit (127.0.0.1:9003)</code>
+                </div>
+                <div class="layer-cipher-box">
+                  <div class="cipher-label">Ciphertext Preview (AES-256-GCM Wire Bytes):</div>
+                  <pre class="cipher-hex mono" id="hex-l2">Awaiting transmission...</pre>
+                </div>
+              </div>
+            </div>
+
+            <!-- Layer 3 -->
+            <div class="layer-card layer-inner" id="card-layer-3">
+              <div class="layer-header">
+                <span class="layer-title">Layer 3: Core (Exit)</span>
+                <span class="layer-badge exit" id="badge-l3">Encrypted with K3</span>
+              </div>
+              <div class="layer-body">
+                <div class="layer-meta-line">
+                  <span>Peeled At:</span> <strong>Hop 3 (Exit Node)</strong>
+                </div>
+                <div class="layer-meta-line">
+                  <span>Size:</span> <span id="size-l3">--</span>
+                </div>
+                <div class="layer-meta-line">
+                  <span>Visible to Exit:</span> <code class="mono-badge">Target: 127.0.0.1:9090</code>
+                </div>
+                <div class="layer-cipher-box">
+                  <div class="cipher-label">Ciphertext Preview (AES-256-GCM Wire Bytes):</div>
+                  <pre class="cipher-hex mono" id="hex-l3">Awaiting transmission...</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Destination Server Verified Response Box -->
+          <div class="destination-response-card" id="dest-response-box">
+            <div class="resp-header">
+              <div class="resp-title">
+                <span class="pulse-dot green"></span>
+                <strong>Destination Response (Received via 3-Hop Reverse Encryption)</strong>
+              </div>
+              <div class="resp-latency" id="resp-latency-badge">Latency: -- ms</div>
+            </div>
+            <pre class="resp-content mono" id="resp-content-text">No transmission executed yet.</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Eavesdropper Threat Model Inspector -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <h2>Eavesdropper Security Analysis (The "Wireshark" Test)</h2>
+          </div>
+        </div>
+
+        <div class="eavesdrop-tabs">
+          <button class="tab-btn active" data-tab="tab-link1">Link 1 (Client &rarr; Guard)</button>
+          <button class="tab-btn" data-tab="tab-link2">Link 2 (Guard &rarr; Middle)</button>
+          <button class="tab-btn" data-tab="tab-link3">Link 3 (Middle &rarr; Exit)</button>
+          <button class="tab-btn" data-tab="tab-link4">Link 4 (Exit &rarr; Destination)</button>
+        </div>
+
+        <div class="tab-content" id="tab-link1">
+          <div class="threat-matrix">
+            <div class="threat-row"><span class="matrix-key">Observer Location:</span> Client's ISP / Local Wi-Fi Attacker</div>
+            <div class="threat-row"><span class="matrix-key">What Attacker Sees:</span> Source: <span class="highlight-warn">Client IP</span> &rarr; Destination: <span class="highlight-ok">Guard IP</span></div>
+            <div class="threat-row"><span class="matrix-key">Packet Payload:</span> <span class="highlight-ok">100% High-Entropy AES-256-GCM Ciphertext</span></div>
+            <div class="threat-row"><span class="matrix-key">Does Attacker Know Destination?</span> <span class="badge-threat no">NO</span> (Dest is hidden under 3 encryption layers)</div>
+            <div class="threat-row"><span class="matrix-key">Does Attacker Know Message Content?</span> <span class="badge-threat no">NO</span></div>
+          </div>
+        </div>
+
+        <div class="tab-content hidden" id="tab-link2">
+          <div class="threat-matrix">
+            <div class="threat-row"><span class="matrix-key">Observer Location:</span> Internet Backbone between Guard &amp; Middle</div>
+            <div class="threat-row"><span class="matrix-key">What Attacker Sees:</span> Source: <span class="highlight-ok">Guard IP</span> &rarr; Destination: <span class="highlight-ok">Middle IP</span></div>
+            <div class="threat-row"><span class="matrix-key">Packet Payload:</span> <span class="highlight-ok">100% High-Entropy AES-256-GCM Ciphertext</span></div>
+            <div class="threat-row"><span class="matrix-key">Does Attacker Know Original Client?</span> <span class="badge-threat no">NO</span></div>
+            <div class="threat-row"><span class="matrix-key">Does Attacker Know Final Destination?</span> <span class="badge-threat no">NO</span></div>
+          </div>
+        </div>
+
+        <div class="tab-content hidden" id="tab-link3">
+          <div class="threat-matrix">
+            <div class="threat-row"><span class="matrix-key">Observer Location:</span> Network Link between Middle &amp; Exit</div>
+            <div class="threat-row"><span class="matrix-key">What Attacker Sees:</span> Source: <span class="highlight-ok">Middle IP</span> &rarr; Destination: <span class="highlight-ok">Exit IP</span></div>
+            <div class="threat-row"><span class="matrix-key">Packet Payload:</span> <span class="highlight-ok">100% High-Entropy AES-256-GCM Ciphertext</span></div>
+            <div class="threat-row"><span class="matrix-key">Does Attacker Know Original Client?</span> <span class="badge-threat no">NO</span></div>
+            <div class="threat-row"><span class="matrix-key">Does Attacker Know Message Content?</span> <span class="badge-threat no">NO</span></div>
+          </div>
+        </div>
+
+        <div class="tab-content hidden" id="tab-link4">
+          <div class="threat-matrix">
+            <div class="threat-row"><span class="matrix-key">Observer Location:</span> Destination Server / Destination ISP</div>
+            <div class="threat-row"><span class="matrix-key">What Attacker Sees:</span> Source: <span class="highlight-ok">Exit Node IP (127.0.0.1:9003)</span> &rarr; Destination: <span class="highlight-warn">Target Server (127.0.0.1:9090)</span></div>
+            <div class="threat-row"><span class="matrix-key">Packet Payload:</span> Plaintext request (Unless HTTPS is used)</div>
+            <div class="threat-row"><span class="matrix-key">Does Destination Know Original Client IP?</span> <span class="badge-threat no">IMPOSSIBLE</span> (Exit node stripped last layer and originated TCP connection)</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Real-Time C++ Node Logs Stream -->
+    <aside class="panel-right">
+      <div class="card card-terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <span class="terminal-title">LIVE C++ LOG STREAM (SSE)</span>
+          <div class="terminal-controls">
+            <button class="btn btn-icon" id="btn-clear-logs" title="Clear console">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="terminal-filter-bar">
+          <button class="filter-pill active" data-filter="ALL">ALL</button>
+          <button class="filter-pill" data-filter="INFO">INFO</button>
+          <button class="filter-pill" data-filter="CRYPTO">CRYPTO</button>
+          <button class="filter-pill" data-filter="PEEL">PEEL</button>
+          <button class="filter-pill" data-filter="SUCCESS">SUCCESS</button>
+          <button class="filter-pill" data-filter="ERROR">ERROR</button>
+        </div>
+
+        <div class="terminal-body mono" id="terminal-logs">
+          <div class="log-entry log-info">
+            <span class="log-time">[INIT]</span>
+            <span class="log-comp">[GATEWAY]</span>
+            <span class="log-msg">Web Gateway attached to C++ Onion Client API. Listening on port 8080.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Relays Consensus Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-emerald)" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            <h3>Directory Authority Relays</h3>
+          </div>
+          <span class="badge-count" id="relays-count-badge">0 Active</span>
+        </div>
+
+        <div class="relays-list" id="active-relays-list">
+          <div class="empty-state">Querying consensus from Directory Authority at 127.0.0.1:8000...</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
